@@ -50,7 +50,7 @@ async function displayCart() {
                       </article>`;
     }
 
-    // Boucle d'afficahge du nombre total d'articles dans le panier et de la somme totale
+    // Boucle d'affichage du nombre total d'articles dans le panier et de la somme totale
     let totalQuantity = 0;
     let totalPrice = 0;
 
