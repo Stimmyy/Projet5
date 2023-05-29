@@ -1,30 +1,28 @@
 // Récupération du LocalStorage
-let cart = JSON.parse(localStorage.getItem("cart"));
+let cart = JSON.parse(localStorage.getItem("cart")) || [];
 
-// Une première variable pour stocker les ID de chaque article dans le panier
-let products = [];
-
-// Une deuxième variable qui récupère l'orderId envoyé comme réponse par le serveur lors de la requête POST
-let orderId = "";
-
-//Affichage du contenu du panier
+// Affichage du contenu du panier
 async function displayCart() {
-    const parser = new DOMParser();
-    const positionEmptyCart = document.getElementById("cart__items");
-    let cartArray = [];
+  const positionEmptyCart = document.getElementById("cart__items");
 
-    // Si le localStorage est vide
-    if (cart === null || cart === 0) {
+  // Si le localStorage est vide
+  if (!cart || cart.length === 0) {
     positionEmptyCart.textContent = "Votre panier est vide";
-    } else {
-    console.log("Des produits se trouvent dans votre panier");
-    }
+    return;
+  }
 
-    // Si le localStorage contient des articles
-    for (i = 0; i < cart.length; i++) {
-        const product = await getProductById(cart[i].id);
-        const totalPriceItem = (product.price *= cart[i].quantity);
-        cartArray += `<article class="cart__item" data-id="${cart[i].id}" data-color="${cart[i].color}">
+  const parser = new DOMParser();
+  const cartHTML = [];
+
+  // Mise à jour de la quantité dans le panier
+  updateCartQuantities();
+
+  // Boucle pour afficher chaque article dans le panier
+  for (let i = 0; i < cart.length; i++) {
+    const product = await getProductById(cart[i].id);
+    const totalPriceItem = product.price * cart[i].quantity;
+
+    const itemHTML = `<article class="cart__item" data-id="${cart[i].id}" data-color="${cart[i].color}">
                         <div class="cart__item__img">
                             <img src="${product.imageUrl}" alt="${product.altTxt}">
                         </div>
@@ -35,105 +33,161 @@ async function displayCart() {
                                 <p>Prix unitaire: ${product.price}€</p>
                             </div>
                             <div class="cart__item__content__settings">
-                            <div class="cart__item__content__settings__quantity">
-                                <p id="quantité">
-                                    Qté : <input data-id= ${cart[i].id} data-color= ${cart[i].color} type="number" class="itemQuantity" name="itemQuantity" min="1" max="100" value=${cart[i].quantity}>
-                                </p>
-                                <p id="sousTotal">Prix total pour cet article: ${totalPriceItem}€</p> 
-                            </div>
-                            <div class="cart__item__content__settings__delete">
-                                <p data-id= ${cart[i].id} data-color= ${cart[i].color} class="deleteItem">Supprimer</p>
-                            </div>
+                                <div class="cart__item__content__settings__quantity">
+                                    <p>Qté : <input data-id="${cart[i].id}" data-color="${cart[i].color}" type="number" class="itemQuantity" name="itemQuantity" min="1" max="100" value="${cart[i].quantity}"></p>
+                                    <p>Prix total pour cet article: <span class="totalPriceItem">${totalPriceItem}</span>€</p> 
+                                </div>
+                                <div class="cart__item__content__settings__delete">
+                                    <p data-id="${cart[i].id}" data-color="${cart[i].color}" class="deleteItem">Supprimer</p>
+                                </div>
                             </div>
                         </div>
-                        </div>
-                      </article>`;
-    }
+                    </article>`;
 
-    // Boucle d'affichage du nombre total d'articles dans le panier et de la somme totale
-    let totalQuantity = 0;
-    let totalPrice = 0;
+    cartHTML.push(itemHTML);
+  }
 
-    for (i = 0; i < cart.length; i++) {
-        const article = await getProductById(cart[i].id);
-        totalQuantity += parseInt(cart[i].quantity);
-        totalPrice += parseInt(article.price * cart[i].quantity);
-    }
+  positionEmptyCart.innerHTML = cartHTML.join("");
 
-    document.getElementById("totalQuantity").innerHTML = totalQuantity;
-    document.getElementById("totalPrice").innerHTML = totalPrice;
+  // Ecouteur d'évènement pour la modification et la suppression d'articles
+  const quantityInputs = document.getElementsByClassName("itemQuantity");
+  for (let i = 0; i < quantityInputs.length; i++) {
+    quantityInputs[i].addEventListener("input", handleQuantityChange);
+    quantityInputs[i].addEventListener("blur", handleQuantityBlur);
+  }
 
-    if (i == cart.length) {
-        const displayBasket = parser.parseFromString(cartArray, "text/html");
-        positionEmptyCart.appendChild(displayBasket.body);
-        changeQuantity();
-        deleteItem();
-    }
-}   
+  const deleteButtons = document.getElementsByClassName("deleteItem");
+  for (let i = 0; i < deleteButtons.length; i++) {
+    deleteButtons[i].addEventListener("click", handleDeleteItem);
+  }
 
-// Récupération des produits de l'API
-async function getProductById(productId) {
-    return fetch("http://localhost:3000/api/products/" + productId)
-        .then(function (res) {
-        return res.json();
-        })
-        .catch((err) => {
-        // Erreur serveur
-        console.log("erreur");
-        })
-        .then(function (response) {
-        return response;
-        });
+  updateCartTotal();
 }
+
+// Fonction pour mettre à jour la quantité dans le panier
+function updateCartQuantities() {
+  for (let i = 0; i < cart.length; i++) {
+    if (cart[i].quantity > 100) {
+      cart[i].quantity = 100; // Rétablir la valeur maximale
+    }
+  }
+  localStorage.setItem("cart", JSON.stringify(cart));
+}
+
+// Fonction pour récupérer les détails d'un produit par son ID
+async function getProductById(productId) {
+  try {
+    const response = await fetch(`http://localhost:3000/api/products/${productId}`);
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.log("Erreur lors de la récupération du produit:", error);
+    throw error;
+  }
+}
+
+// Fonction de mise à jour de la quantité d'un article
+async function handleQuantityChange(event) {
+  const input = event.target;
+  const newQuantity = parseInt(input.value);
+  const productId = input.getAttribute("data-id");
+  const color = input.getAttribute("data-color");
+
+  // Vérification de la quantité maximale (100)
+  if (newQuantity > 100) {
+    input.value = 100; // Si la quantité dépasse les 100, on la remet à 100
+    return; 
+  }
+
+  // Mise à jour de la quantité dans le localStorage
+  if (cart) {
+    const updatedCart = cart.map((item) => {
+      if (item.id === productId && item.color === color) {
+        // Vérification de la quantité maximale (100) avant la mise à jour
+        item.quantity = newQuantity <= 100 ? newQuantity : 100;
+      }
+      return item;
+    });
+    cart = updatedCart; // Mettre à jour la variable cart avec les nouvelles valeurs
+    localStorage.setItem("cart", JSON.stringify(updatedCart));
+  }
+
+  // Mise à jour du prix total pour cet article
+  const priceElement = input.parentNode.nextElementSibling.querySelector(".totalPriceItem");
+  const product = await getProductById(productId);
+  if (product) {
+    const totalPriceItem = product.price * newQuantity;
+    priceElement.textContent = totalPriceItem;
+  }
+
+  updateCartTotal();
+}
+// Fonction pour gérer le dépassement de quantité après la perte de focus de l'input. Cette fonction est une mesure pour s'assurer que la quantité ne peut être dépassée.
+function handleQuantityBlur(event) {
+  const input = event.target;
+  const newQuantity = parseInt(input.value);
+  const productId = input.getAttribute("data-id");
+  const color = input.getAttribute("data-color");
+
+  // Vérification de la quantité maximale (100)
+  if (newQuantity > 100) {
+    input.value = 100; // Rétablir la valeur maximale
+  }
+
+  // Mise à jour de la quantité dans le localStorage
+  if (cart) {
+    const updatedCart = cart.map((item) => {
+      if (item.id === productId && item.color === color) {
+        item.quantity = newQuantity;
+      }
+      return item;
+    });
+    cart = updatedCart; // Mettre à jour la variable cart avec les nouvelles valeurs
+    localStorage.setItem("cart", JSON.stringify(updatedCart));
+  }
+
+  updateCartTotal();
+}
+
+// Fonction de suppression d'un article
+function handleDeleteItem(event) {
+  const button = event.target;
+  const productId = button.getAttribute("data-id");
+  const color = button.getAttribute("data-color");
+
+  // Suppression de l'article du localStorage
+  if (cart) {
+    const updatedCart = cart.filter((item) => !(item.id === productId && item.color === color));
+    cart = updatedCart; // Mettre à jour la variable cart avec les nouvelles valeurs
+    localStorage.setItem("cart", JSON.stringify(updatedCart));
+  }
+
+  // Suppression de l'article de l'affichage du panier
+  const article = button.closest(".cart__item");
+  article.remove();
+
+  updateCartTotal();
+}
+
+// Fonction de mise à jour du total du panier
+async function updateCartTotal() {
+  let totalQuantity = 0;
+  let totalPrice = 0;
+
+  for (let i = 0; i < cart.length; i++) {
+    totalQuantity += parseInt(cart[i].quantity);
+    const product = await getProductById(cart[i].id);
+    if (product) {
+      totalPrice += product.price * cart[i].quantity;
+    }
+  }
+
+  document.getElementById("totalQuantity").textContent = totalQuantity;
+  document.getElementById("totalPrice").textContent = totalPrice;
+}
+
 displayCart();
 
- // Modification de la quantité d'un article
- function changeQuantity() {
-    const quantityInputs = document.querySelectorAll(".itemQuantity");
-    quantityInputs.forEach((quantityInput) => {
-        quantityInput.addEventListener("change",(event) => {
-            event.preventDefault();
-            const inputValue = event.target.value;
-            const dataId = event.target.getAttribute("data-id");
-            const dataColor = event.target.getAttribute("data-color");
-            let cart = localStorage.getItem("cart");
-            let items = JSON.parse(cart);
-
-            items = items.map((item, index) => {
-                if (item.id === dataId && item.color === dataColor) {
-                    item.quantity = inputValue;
-                }
-                return item;
-            });
-            // Mise à jour du LocalStorage
-            let itemsStr = JSON.stringify(items);
-            localStorage.setItem("cart", itemsStr);
-            // Refresh de la page Panier
-            location.reload();
-        });
-    });
- }
-
-// Supression d'un article
-function deleteItem() {
-    const deleteButtons = document.querySelectorAll(".deleteItem");
-    deleteButtons.forEach((deleteButton) => {
-        deleteButton.addEventListener("click",(event) => {
-            event.preventDefault();
-            const deleteId = event.target.getAttribute("data-id");
-            const deleteColor = event.target.getAttribute("data-color");
-            cart = cart.filter(
-                (element) => !(element.id == deleteId && element.color == deleteColor)
-            );
-            console.log(cart);
-            //Mise à jour du LocalStorage
-            localStorage.setItem("cart",JSON.stringify(cart));
-            //Refresh de la page Panier
-            location.reload();
-            alert("Article retiré du panier");
-        });
-    });
-}
 
                                     // PARTIE FORMULAIRE 
 
