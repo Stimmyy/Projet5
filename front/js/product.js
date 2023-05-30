@@ -64,7 +64,7 @@ let registeredProduct = (product) => {
         0
       );
       
-      if (totalQuantityInCart + quantityToAdd > 102) {  // Limite de quantité : 100
+      if (totalQuantityInCart + quantityToAdd > 100) {  // Limite de quantité : 100
         confirm("La quantité maximale autorisée est de 100");
         return;
       }
