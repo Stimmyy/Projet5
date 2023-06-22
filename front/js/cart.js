@@ -55,7 +55,7 @@ async function displayCart() {
 
   positionEmptyCart.innerHTML = cartHTML.join("");
 
-  // Ecouteur d'évènement pour la modification et la suppression d'articles
+  // Ecouteur d'event pour la modification et la suppression d'articles
   const quantityInputs = document.getElementsByClassName("itemQuantity");
   for (let i = 0; i < quantityInputs.length; i++) {
     quantityInputs[i].addEventListener("input", handleQuantityChange);
